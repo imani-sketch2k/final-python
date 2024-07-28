@@ -1,0 +1,155 @@
+import tkinter as tk
+from tkinter import filedialog, messagebox
+from PIL import Image, ImageTk
+import sqlite3
+
+class ImageNotLoadedException(Exception):
+    """Custom exception for when an image is not loaded properly."""
+    pass
+
+class BouncingDVDLogo:
+    def __init__(self, root):
+        """
+        Initialize the BouncingDVDLogo application.
+
+        Args:
+            root (tk.Tk): The root window object.
+        """
+        self.root = root
+        self.root.title("Bouncing DVD Logo")
+        self.canvas = tk.Canvas(root, width=800, height=600, bg="black")
+        self.canvas.pack()
+
+        self.dx = 5
+        self.dy = 3
+        self.logo_photo = None
+        self.logo = None
+
+        self.upload_button = tk.Button(root, text="Upload Image", command=self.upload_image)
+        self.upload_button.pack()
+
+        self.db_conn = self.connect_to_database()
+        self.create_table()
+
+        # Load the default DVD logo
+        try:
+            self.logo_photo = self.load_image(r"C:\Users\spicy\OneDrive\Pictures\OIP.jpg", (100, 50))
+            self.logo = self.canvas.create_image(400, 300, image=self.logo_photo)
+            self.animate()
+        except ImageNotLoadedException as e:
+            messagebox.showerror("Image Error", str(e))
+
+    def connect_to_database(self):
+        """
+        Connect to the SQLite database and return the connection object.
+
+        Returns:
+            sqlite3.Connection: Database connection object.
+        """
+        try:
+            conn = sqlite3.connect('bouncing_dvd_logo.db')
+            return conn
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error", f"Database connection failed: {e}")
+            return None
+
+    def create_table(self):
+        """Create a table in the database to store logo positions."""
+        if self.db_conn:
+            try:
+                cursor = self.db_conn.cursor()
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS logo_positions (
+                        id INTEGER PRIMARY KEY,
+                        x INTEGER NOT NULL,
+                        y INTEGER NOT NULL
+                    )
+                ''')
+                self.db_conn.commit()
+            except sqlite3.Error as e:
+                messagebox.showerror("Database Error", f"Failed to create table: {e}")
+
+    def load_image(self, path, size):
+        """
+        Load and resize an image from the given path.
+
+        Args:
+            path (str): The file path to the image.
+            size (tuple): The new size for the image.
+
+        Returns:
+            ImageTk.PhotoImage: The loaded image.
+
+        Raises:
+            ImageNotLoadedException: If the image cannot be loaded.
+        """
+        try:
+            image = Image.open(path)
+            image = image.resize(size, Image.ANTIALIAS)
+            return ImageTk.PhotoImage(image)
+        except Exception as e:
+            raise ImageNotLoadedException(f"Error loading image: {e}")
+
+    def update_position(self):
+        """Move the logo and check for boundary collisions."""
+        if self.logo:
+            self.canvas.move(self.logo, self.dx, self.dy)
+            pos = self.canvas.coords(self.logo)
+
+            if pos[0] <= 0 or pos[0] >= 800:
+                self.dx = -self.dx
+                self.save_position_to_db(pos[0], pos[1])
+            if pos[1] <= 0 or pos[1] >= 600:
+                self.dy = -self.dy
+                self.save_position_to_db(pos[0], pos[1])
+
+    def save_position_to_db(self, x, y):
+        """
+        Save the logo position to the database.
+
+        Args:
+            x (int): The x-coordinate of the logo.
+            y (int): The y-coordinate of the logo.
+        """
+        if self.db_conn:
+            try:
+                cursor = self.db_conn.cursor()
+                cursor.execute("INSERT INTO logo_positions (x, y) VALUES (?, ?)", (x, y))
+                self.db_conn.commit()
+            except sqlite3.Error as e:
+                messagebox.showerror("Database Error", f"Failed to save position: {e}")
+
+    def animate(self):
+        """Update the canvas at regular intervals."""
+        self.update_position()
+        self.root.after(30, self.animate)
+
+    def upload_image(self):
+        """Open a file dialog to upload an image and start the animation."""
+        file_path = filedialog.askopenfilename()
+        if file_path:
+            try:
+                self.logo_photo = self.load_image(file_path, (100, 50))
+                if self.logo:
+                    self.canvas.delete(self.logo)
+                self.logo = self.canvas.create_image(400, 300, image=self.logo_photo)
+                self.animate()
+            except ImageNotLoadedException as e:
+                messagebox.showerror("Image Error", str(e))
+
+    def __str__(self):
+        return "BouncingDVDLogo application"
+
+    def __repr__(self):
+        return f"BouncingDVDLogo(root={self.root})"
+
+    def close_database(self):
+        """Close the database connection."""
+        if self.db_conn:
+            self.db_conn.close()
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = BouncingDVDLogo(root)
+    root.protocol("WM_DELETE_WINDOW", app.close_database)  # Ensure the database closes on exit
+    root.mainloop()
