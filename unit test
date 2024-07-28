@@ -1,0 +1,34 @@
+import unittest
+from PIL import Image
+import os
+from bouncing_dvd_logo import BouncingDVDLogo, ImageNotLoadedException
+
+class TestBouncingDVDLogo(unittest.TestCase):
+    def setUp(self):
+        self.app = BouncingDVDLogo(tk.Tk())
+
+    def test_load_image_success(self):
+        """Test loading a valid image."""
+        path = r"C:\Users\spicy\OneDrive\Pictures\OIP.jpg"
+        image = self.app.load_image(path, (100, 50))
+        self.assertIsInstance(image, ImageTk.PhotoImage)
+
+    def test_load_image_failure(self):
+        """Test loading an invalid image."""
+        with self.assertRaises(ImageNotLoadedException):
+            self.app.load_image("invalid_path.jpg", (100, 50))
+
+    def test_save_position_to_db(self):
+        """Test saving a position to the database."""
+        x, y = 100, 200
+        self.app.save_position_to_db(x, y)
+        cursor = self.app.db_conn.cursor()
+        cursor.execute("SELECT x, y FROM logo_positions ORDER BY id DESC LIMIT 1")
+        result = cursor.fetchone()
+        self.assertEqual(result, (x, y))
+
+    def tearDown(self):
+        self.app.close_database()
+
+if __name__ == "__main__":
+    unittest.main()
